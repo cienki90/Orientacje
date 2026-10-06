@@ -1,0 +1,56 @@
+name: windows
+
+on:
+  push:
+    paths: ["orientacje.cs", "orientacje.bat", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    env:
+      ORIENT_BEZ_PAUZY: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pamięć podręczna kafli OSM (oszczędza serwer OSM)
+        uses: actions/cache@v4
+        with:
+          path: cache_kafli
+          key: kafle-osm-rysunek2-z16
+
+      - name: Kompilacja wbudowanym csc.exe i test na Rysunek2.dxf
+        shell: cmd
+        run: call orientacje.bat Rysunek2.dxf --kontrola
+
+      - name: Sprawdzenie wyników
+        shell: pwsh
+        run: |
+          $d = "Rysunek2_orientacje"
+          $jpg = Get-ChildItem $d -Filter "Rysunek2_orientacja_??.jpg"
+          $jgw = Get-ChildItem $d -Filter "*.jgw"
+          "JPG: $($jpg.Count), JGW: $($jgw.Count)"
+          if ($jpg.Count -lt 1 -or $jpg.Count -ne $jgw.Count) { throw "brak obrazów" }
+          foreach ($f in $jpg) {
+            Add-Type -AssemblyName System.Drawing
+            $im = [System.Drawing.Image]::FromFile($f.FullName)
+            "$($f.Name): $($im.Width) x $($im.Height), $([math]::Round($f.Length/1MB,2)) MB"
+            $im.Dispose()
+          }
+          Get-Content "$d\Rysunek2_orientacje.txt"
+          Get-Content "$d\Rysunek2_orientacja_01.jgw"
+          if (-not (Test-Path "$d\Rysunek2_orientacje.lsp")) { throw "brak LISP" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orientacje-windows
+          path: |
+            orientacje.exe
+            orientacje.bat
+            orientacje.cs
+            README.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wynik-testu-rysunek2
+          path: Rysunek2_orientacje/
